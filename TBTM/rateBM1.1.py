@@ -35,7 +35,7 @@ def BMratepic(picname,path):
             picpath = picname
             picn = os.path.basename(picname)
             third = os.path.join(path,picn)
-            if not(os.path.exists(third)):
+            if os.path.exists(third):
                   print("已有")
             else:
                   picinf = urllib.request.urlopen("https:" + picpath).read()
@@ -117,40 +117,13 @@ class TBTM():
             os.makedirs(fifth)
             return fifth
       
-      #评论检查
-      def _TBrun(self,cookie,ratepath,name):
-            #获取淘宝店铺登录cookie
-            self._head['cookie'] = loginfo(os.path.join(os.getcwd(),cookie))
-            #获取淘宝店铺评论网址
-            ratelink = loginfo(os.path.join(os.getcwd(),ratepath))
+      #淘宝评论
+      def _TBrun(self,i,ratelink):
             #获取淘宝店铺评论信息
-            rate = json.loads(urlink(ratelink.format(self._rid,str(1)),self._head)[5:-2])
-            if rate['comments']:
-                  if self._ratenum > rate['maxPage']:
-                        self._ratenum = rate['maxPage']
-                  for i in range(1,int(self._ratenum)+1):
-                        self._TaoBao.append(json.loads(urlink(ratelink.format(self._rid,str(i)),self._head)[5:-2]))
-                  return self._TaoBao
-            else:
-                  exit
-            
-      #评论检查
-      def _TMrun(self,cookie,ratepath,name):
-            #获取淘宝店铺登录cookie
-            self._head['cookie'] = loginfo(os.path.join(os.getcwd(),cookie))
-            #获取淘宝店铺评论网址
-            ratelink = loginfo(os.path.join(os.getcwd(),ratepath))
-            #获取淘宝店铺评论信息                
-            rate = json.loads('{%s}' % (urlink(ratelink.format(self._rid,str(1)),self._head)))
-            if rate['rateDetail']['rateList']:
-                  if self._ratenum > rate['rateDetail']['paginator']['lastPage']:
-                        self._ratenum = rate['rateDetail']['paginator']['lastPage']
-                  for i in range(1,int(self._ratenum)+1):
-                        self._TianMao.append(json.loads('{%s}' % (urlink(ratelink.format(self._rid,str(i)),self._head))))
-                  return self._TianMao
-            else:
-                  exit
-      #淘宝店铺评论信息
+            rinfo = json.loads(urlink(ratelink.format(self._rid,str(i)),self._head)[5:-2])
+            self._TBPrate(rinfo["comments"])
+
+      #淘宝店铺评论处理
       def _TBPrate(self,comments):
             for item in comments:
                 if int(item['rate']) != -1 and item['photos']:
@@ -168,7 +141,14 @@ class TBTM():
                         if item['append'] and item['append']['photos']:
                               for items in item['append']['photos']:
                                     BMratepic(items['url'],fifth)
-                        
+     
+      #天猫评论
+      def _TMrun(self,i,ratelink):
+            #获取淘宝店铺评论信息                
+            rinfo = json.loads('{%s}' % (urlink(ratelink.format(self._rid,str(i)),self._head)))
+            self._TMPrate(rinfo['rateDetail']['rateList'])
+            
+      #天猫店铺评论处理             
       def _TMPrate(self,comments):
             for item in comments:
                 if item['pics']:
@@ -190,12 +170,34 @@ class TBTM():
       #存放与处理获取评论资源信息
       def ratephoto(self):
             if "taobao" in self._linkname:
-                  for info in self._TBrun(**self._BMinfo[self._linkname]):
-                        self._TBPrate(info["comments"])
+                  #获取淘宝店铺登录cookie
+                  self._head['cookie'] = loginfo(os.path.join(os.getcwd(),self._BMinfo[self._linkname]['cookie']))
+                  #获取淘宝店铺评论网址
+                  ratelink = loginfo(os.path.join(os.getcwd(),self._BMinfo[self._linkname]['ratepath']))
+                  rate = json.loads(urlink(ratelink.format(self._rid,str(1)),self._head)[5:-2])
+                  if rate['comments']:
+                        self._ratenum = (self._ratenum > rate['maxPage']) and rate['maxPage'] or self._ratenum
+                        self._TaoBao = [threading.Thread(target=self._TBrun,args=(i,ratelink),name=str(i)) for i in range(1,int(self._ratenum)+1)]
+                        for t in self._TaoBao:
+                              t.start()
+                              t.join()
+                  else:
+                        print("没有评论信息")                    
             elif "tmall" in self._linkname:
-                  for info in self._TMrun(**self._BMinfo[self._linkname]):
-                        self._TMPrate(info['rateDetail']['rateList'])
-      
+                  #获取淘宝店铺登录cookie
+                  self._head['cookie'] = loginfo(os.path.join(os.getcwd(),self._BMinfo[self._linkname]['cookie']))
+                  #获取淘宝店铺评论网址
+                  ratelink = loginfo(os.path.join(os.getcwd(),self._BMinfo[self._linkname]['ratepath']))
+                  rate = json.loads('{%s}' % (urlink(ratelink.format(self._rid,str(1)),self._head)))
+                  if rate['rateDetail']['rateList']:
+                        self._ratenum = (self._ratenum > rate['rateDetail']['paginator']['lastPage']) and rate['rateDetail']['paginator']['lastPage'] or self._ratenum
+                        self._TianMao = [threading.Thread(target=self._TMrun,args=(i,ratelink),name=str(i))for i in range(1,int(self._ratenum)+1)]
+                        for t in self._TianMao:
+                             t.start()
+                             t.join()
+                  else:
+                        print("没有评论信息")
+                        
       #存放与获取详情图
       def _BMpic(self):
             Depic = re.findall(self._BMDetails[0],urlink("http:" + self._shopinfo()[2],self._head))
